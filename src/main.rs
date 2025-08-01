@@ -6,11 +6,21 @@ use chip8::CHIP8;
 fn main() {
     // initialize the cpu
     let mut chip8 = CHIP8::new();
-    chip8.debug = true;
+    chip8.debug = false;
+
+    // get cli game argument
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() < 2 {
+        println!("first argument should be a game!");
+        return;
+    }
+
+    let game = &args[1];
+    println!("{}", game);
 
     // load rom to cpu memory
     chip8.load_fonts();
-    chip8.load_rom("./test_opcode.ch8");
+    chip8.load_rom(game);
     println!("{:x?}", chip8.memory);
 
     const SCALE_WIDTH: usize = 1024; // scaled 16 times

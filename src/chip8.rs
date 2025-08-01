@@ -315,8 +315,17 @@ impl CHIP8 {
                         // if the bit is on
                         // then figure out the index equivalent to (x, y) on the screen and XOR with 1
                         if bit == 1 {
-                            let pixel_index = (x + col) + (y + row) * 64;
-                            self.display[pixel_index] ^= 1;
+                            // for wrapping, use modulus on the pixels
+                            let pixel_x = (x + col) % 64;
+                            let pixel_y = (y + row) % 32;
+                            let pixel_index = pixel_x + pixel_y * 64;
+
+                            // if the pixel already is displaying something (meaning something is there)
+                            if self.display[pixel_index] == 1 {
+                                self.vregister[0xF] = 1; // collision happens, set VF to 1
+                            }
+
+                            self.display[pixel_index] ^= 1; // XOR the pixel
                         }
                     }
                 }
