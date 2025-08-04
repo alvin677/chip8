@@ -1,4 +1,4 @@
-use std::fs;
+use std::{fs, thread::sleep, time::Duration};
 
 pub struct CHIP8 {
     pub memory: [u8; 4096],
@@ -80,7 +80,8 @@ impl CHIP8 {
         let msb = self.memory[self.program_counter as usize];
         let lsb = self.memory[(self.program_counter + 1) as usize];
 
-        let opcode: u16 = ((msb as u16) << 8) | lsb as u16;
+        let opcode: u16 = ((msb as u16) << 8) | lsb as u16; // read the instruction and then increment PC
+        self.program_counter += 0x02; // increment the counter to the next address (opcodes on the chip8 are 2 bytes)
 
         /*if self.debug {
             println!(
@@ -98,7 +99,6 @@ impl CHIP8 {
                 }
 
                 self.display = [0; 64 * 32];
-                self.program_counter += 0x02; // increment the counter to the next address (opcodes on the chip8 are 2 bytes)
             }
             0x00EE => {
                 // return from a subroutine
@@ -108,7 +108,6 @@ impl CHIP8 {
 
                 self.stack_pointer -= 1;
                 self.program_counter = self.stack[self.stack_pointer as usize];
-                self.program_counter += 0x02;
             }
             0x1000..=0x1FFF => {
                 // jump to location nnn
@@ -144,8 +143,6 @@ impl CHIP8 {
                 if self.vregister[reg] == kk {
                     self.program_counter += 2; // skip next instruction
                 }
-
-                self.program_counter += 0x02;
             }
             0x4000..=0x4FFF => {
                 // skip next instruction if Vx != kk
@@ -162,8 +159,6 @@ impl CHIP8 {
                 if self.vregister[reg] != kk {
                     self.program_counter += 2;
                 }
-
-                self.program_counter += 0x02;
             }
             0x5000..=0x5FFF => {
                 // skip next instruction if Vx == Vy
@@ -180,8 +175,6 @@ impl CHIP8 {
                 if self.vregister[reg_x] == self.vregister[reg_y] {
                     self.program_counter += 2;
                 }
-
-                self.program_counter += 0x02;
             }
             0x6000..=0x6FFF => {
                 // put value kk into register Vx
@@ -193,7 +186,6 @@ impl CHIP8 {
                 }
 
                 self.vregister[reg] = kk;
-                self.program_counter += 0x02;
             }
             0x7000..=0x7FFF => {
                 // set Vx = Vx + kk
@@ -205,7 +197,6 @@ impl CHIP8 {
                 }
 
                 self.vregister[reg] = self.vregister[reg].wrapping_add(kk);
-                self.program_counter += 0x02;
             }
             0x8000..=0x8FFF => {
                 // 0x8 has multiple variants, handle all here based on the last nibble
@@ -259,8 +250,6 @@ impl CHIP8 {
                     } // set Vx = Vx SHL (shift left) 1
                     _ => println!("unknown 0x8xxx opcode variant: {}", last_nibble),
                 }
-
-                self.program_counter += 0x02;
             }
             0x9000..=0x9FFF => {
                 let reg_x = ((opcode & 0x0F00) >> 8) as usize;
@@ -269,14 +258,11 @@ impl CHIP8 {
                 if self.vregister[reg_x] != self.vregister[reg_y] {
                     self.program_counter += 2;
                 }
-
-                self.program_counter += 0x02;
             } // skip next instruction if Vx != Vy
             0xA000..=0xAFFF => {
                 let nnn = opcode & 0x0FFF;
 
                 self.index_register = nnn;
-                self.program_counter += 0x02;
             } // set I = nnn
             0xB000..=0xBFFF => {
                 let nnn = opcode & 0x0FFF;
@@ -289,7 +275,6 @@ impl CHIP8 {
                 let random_byte: u8 = rand::random();
 
                 self.vregister[reg] = random_byte & kk;
-                self.program_counter += 0x02;
             } // set Vx = random byte AND kk
             0xD000..=0xDFFF => {
                 // sprites are 8 bits wide and n-bytes tall (+1 on the y-axis)
@@ -329,8 +314,6 @@ impl CHIP8 {
                         }
                     }
                 }
-
-                self.program_counter += 0x02;
             } // display n-byte sprite starting at memory location I at (Vx, Vy), set VF = collision
             0xE000..=0xEFFF => {
                 let reg = ((opcode & 0x0F00) >> 8) as usize;
@@ -349,8 +332,6 @@ impl CHIP8 {
                     } // skip next instruction if key with the value of Vx is not pressed
                     _ => println!("unknown last two nibbles of 0xExxx"),
                 }
-
-                self.program_counter += 0x02;
             }
             0xF000..=0xFFFF => {
                 let reg = ((opcode & 0x0F00) >> 8) as usize;
@@ -364,16 +345,17 @@ impl CHIP8 {
                         let mut key: Option<u8> = None;
 
                         // attempt to find a held key
-                        while key.is_none() {
-                            for (i, &k) in self.keypad.iter().enumerate() {
-                                if k {
-                                    key = Some(i as u8);
-                                    break; // break out early
-                                }
+                        for (i, &k) in self.keypad.iter().enumerate() {
+                            if k {
+                                key = Some(i as u8);
+                                self.vregister[reg] = key.unwrap();
+                                break; // break out early
                             }
                         }
 
-                        self.vregister[reg] = key.unwrap();
+                        if key.is_none() {
+                            self.program_counter -= 2; // redo this instruction if
+                        }
                     } // halt the program and wait for a key press, store the value of the key in Vx
                     0x15 => {
                         self.delay_timer = self.vregister[reg];
@@ -420,8 +402,6 @@ impl CHIP8 {
                     } // read registers V0 through Vx from memory starting at location I
                     _ => println!("unknown last two nibbles of 0xFxxx"),
                 }
-
-                self.program_counter += 0x02;
             }
             _ => {
                 if self.debug {
@@ -437,6 +417,8 @@ impl CHIP8 {
             self.sound_timer -= 1;
         }
 
+        //if self.debug {
         println!("PC: {:04X}, Opcode: {:04X}", self.program_counter, opcode);
+        //}
     }
 }
